@@ -1,0 +1,5 @@
+#
+# shell script for configuring the system
+#
+SENSMON_HOME=/opt/sensmon
+

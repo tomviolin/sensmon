@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   committed-rev="2"
+   name=""
+   committed-date="2008-12-30T12:44:31.719454Z"
+   url="file:///usr/shares/svnrepos/sensmon/trunk/bin"
+   last-author="tomh"
+   kind="dir"
+   uuid="693535ca-425f-0410-9bd6-c10bae083ffd"
+   repos="file:///usr/shares/svnrepos/sensmon"
+   revision="2"/>
+<entry
+   committed-rev="2"
+   name="sensmon.sql"
+   text-time="2008-12-30T12:42:42.000000Z"
+   committed-date="2008-12-30T12:44:31.719454Z"
+   checksum="7d3f36a0f66892befe9396e70b8871c8"
+   last-author="tomh"
+   kind="file"
+   prop-time="2008-12-30T12:36:02.000000Z"/>
+<entry
+   committed-rev="1"
+   name="getdata.sh"
+   text-time="2008-12-30T12:36:02.000000Z"
+   committed-date="2008-12-30T12:33:48.984308Z"
+   checksum="8587aa94b0dcb400f14d6195009e99cf"
+   last-author="tomh"
+   kind="file"
+   prop-time="2008-12-30T12:36:02.000000Z"/>
+<entry
+   name="test.php"
+   kind="file"
+   schedule="add"
+   revision="0"/>
+<entry
+   committed-rev="4"
+   name="SensorMonitor.php"
+   text-time="2009-02-02T23:54:22.000000Z"
+   committed-date="2009-02-02T23:56:38.367309Z"
+   checksum="acb9c5b17d7fc4da0870aa75229d6abc"
+   last-author="tomh"
+   kind="file"
+   prop-time="2008-12-30T12:36:02.000000Z"
+   revision="4"/>
+<entry
+   name="Makefile"
+   kind="file"
+   schedule="add"
+   revision="0"/>
+</wc-entries>

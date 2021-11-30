@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   committed-rev="1"
+   name=""
+   committed-date="2008-12-30T12:33:48.984308Z"
+   url="file:///usr/shares/svnrepos/sensmon/trunk/conf"
+   last-author="tomh"
+   kind="dir"
+   uuid="693535ca-425f-0410-9bd6-c10bae083ffd"
+   repos="file:///usr/shares/svnrepos/sensmon"
+   revision="1"/>
+<entry
+   committed-rev="1"
+   name="sensmon.conf"
+   text-time="2008-12-30T12:36:02.000000Z"
+   committed-date="2008-12-30T12:33:48.984308Z"
+   checksum="537035aedb47439217bf6cb79145303a"
+   last-author="tomh"
+   kind="file"
+   prop-time="2008-12-30T12:36:02.000000Z"/>
+</wc-entries>

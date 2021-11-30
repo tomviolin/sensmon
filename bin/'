@@ -1,0 +1,318 @@
+<?php
+function GraphLabelFormat($dtVal) {
+	return date('D d H:i:s', $dtVal);
+}
+
+// this class will handle all JpGraph calls
+define(JPGRAPH, '/usr/share/jpgraph-current/src');
+require_once(JPGRAPH."/jpgraph.php");
+require_once(JPGRAPH."/jpgraph_line.php");
+require_once(JPGRAPH."/jpgraph_scatter.php");
+require_once(JPGRAPH."/jpgraph_date.php");
+
+
+
+// constant declarations
+define(SQL_ERR, 'if (mysql_errno() > 0) { die(__FILE__. ": MySQL error: ".mysql_error()."\n"); }');
+define(DEFAULT_SENSORID, 0);
+
+// class for monitoring sensor readings, typically environmental
+// parameters in a building.
+
+class SensorMonitor {
+
+	protected $sensorID;		// record ID of sensor
+	protected $config;		// array containing configuration options
+
+	// the following values are found in the database:
+	/*
+		dbTable			// where to obtain the data
+		dbSensorColumn		// which column we are monitoring
+		dbAlarmMinColumn	// current alarm minimum setting
+		dbAlarmMaxColumn	// current alarm maximum setting
+		dbRecDate		// datetime of data collection
+		dbWhere			// filter for data
+		alarmMin		// alarm minimum
+		alarmMax		// alarm maximum
+		alertEmail		// e-mail to send alarm
+		avgOver			// average over this time interval
+					//	(MySQL interval syntax, e.g. "20 minute")
+		minRecs;		// minimum number of records for alarm
+					//   to be considered "real"
+		alarmTimeoutTime;	// time interval from present that
+					//   data is missing to trigger
+					//   a sensor timeout alarm
+					//   (MySQL interval syntax, e.g. "30 minute")
+	*/
+
+	protected function ReadSMConfig() {
+		$query = "select * from sensmon.sensor_config where sensor_id={$this->sensorID}";
+		$result = @mysql_query($query);
+		eval(SQL_ERR);
+		if (mysql_num_rows($result) == 1) {
+			return mysql_fetch_array($result);
+		} else {
+			return NULL;
+		}
+	}
+
+	// constructor
+	function SensorMonitor($c_sensorID, $dbServer="", $dbUser="", $dbPass="") {
+		$this->sensorID = $c_sensorID;
+		if ($dbServer != "") {
+			@mysql_connect($dbServer, $dbUser, $dbPass);
+			eval(SQL_ERR);
+		}
+		if (($this->config = $this->ReadSMConfig()) === NULL) {
+			$this->sensorID = 0;
+			$this->config = ReadSMConfig();
+			if ($this->config === NULL) {
+				die ("no default sensor config found.");
+			}
+		}
+	}
+
+	public function WriteSMConfig($sensorID) {
+		if ($sensorID == "") {
+			// we are inserting
+			$icols = "";
+			$ivals = "";
+			foreach ($this->config as $key => $val) {
+				$icols .= "\`$key\`,";
+				$ivals .= "\"$val\",";
+				if (strlen($icols) > 0) {
+					$icols = substr($icols, 0, strlen($icols)-1);
+				}
+				if (strlen($icols) > 0) {
+					$ivals = substr($ivals, 0, strlen($ivals)-1);
+				}
+			}
+			$query = "insert into sensmon.sensor_config ($icols) values ($ivals)";
+		} else {
+			// we are updating
+			$query = "update sensmon.sensor_config ";
+			foreach ($this->config as $key -> $val) {
+				if ($key != "recid") {
+					$query .= "set \`$key\` = \"$val\",";
+				}
+			}
+			$query = substr($query,0,strlen($query)-1) . " where recid == {$this->sensorID}";
+		}
+		$result = @mysql_query($query);
+		eval(SQL_ERR);
+	}
+
+	public function FetchCurrentAlarmReading() {
+		// Returns current sensor value to be used for checking the alarm.
+		//   This value is the average over the most recent $avgOver interval.
+
+		// first obtain highest date on file
+		$query = "select max({$this->config['datecolumn']}) as maxdbrecdate from {$this->config['database']}.{$this->config['table']}";
+		if ($this->config['sqlwhere'] != "") {
+			$query .= " ".$this->config['sqlwhere'];
+		}
+		$result = @mysql_query($query);
+		eval(SQL_ERR);
+		if (mysql_num_rows($result) != 1) {
+			die("MySQL query: $query\ntable {$this->config['table']} has no rows for sensor {$this->config['table']}.{$this->config['datacolumn']}");
+		}
+		$row = @mysql_fetch_array($result);
+		eval(SQL_ERR);
+		$maxDate = $row['maxdbrecdate'];
+		//echo "max recdate=$maxDate\n";
+
+		$query = "select avg({$this->config['datacolumn']}) as sensorVal, count({$this->config['datacolumn']}) as dataCount from {$this->config['database']}.{$this->config['table']} where ({$this->config['datecolumn']} >= date_sub(convert_tz(now(),'SYSTEM','GMT'), interval {$this->config['alarm_avg_time']}))";
+		if ($dbWhere != "") {
+			$query .= " and ($dbWhere)";
+		}
+		$result = @mysql_query($query);
+		eval(SQL_ERR);
+		if (mysql_num_rows($result) == 0) {
+			die("MySQL query: $query\ntable {$this->config['database']}.{$this->config['table']} has no rows for sensor {$this->config['datacolumn']}");
+		}
+		$row = @mysql_fetch_array($result);
+		eval(SQL_ERR);
+		return array($row['sensorVal'],$row['dataCount']);
+	}
+
+	protected function SendAlarm($errorMessage) {
+		// send alarm
+		mail($this->config['alert_email'], "ALARM", $errorMessage, "X-Mailer: GLWI alarm www.glwi.uwm.edu");
+	}
+
+
+	protected function RecordAlarmCheck($dataValue, $alarmTripType = "") {
+		$alarmValue = "";
+		switch ($alarmTripType) {
+			case "min":	$alarmField = "alarm_trip_min"; break;
+			case "max":	$alarmField = "alarm_trip_max"; break;
+			case "timeout":	$alarmField = "alarm_trip_timeout"; break;
+			default:	$alarmField = "";
+		}
+		if ($alarmField != "") {
+			$alarmField = ", " . $alarmField;
+			$alarmValue = ", 1";
+		}
+		$query = "insert into sensmon.alarm_check_history (sensor_id, recdate, alarm_min, alarm_max, data_value $alarmField) "
+			."values ({$this->config['sensor_id']}, convert_tz(now(), 'SYSTEM','GMT'), {$this->config['alarm_min']},{$this->config['alarm_max']}, $dataValue $alarmValue);";
+		$result = @mysql_query($query);
+		eval(SQL_ERR);
+	}
+
+
+	public function CheckAlarmCondition() {
+		// check alarm conditions
+		list($currentAlarmReading, $rowCount) = $this->FetchCurrentAlarmReading();
+		if ($rowCount < $this->config['alarm_min_readings']) {
+			// insufficient data to determine an alarm condition
+			//    based on sensor out of range.
+			//    We must check time since last measurement.
+			//    NOTE: This is with respect to the database server's time.
+			//    This eliminates any issues with client/server time mismatch.
+			$query = "select count({$this->config['datacolumn']}) as dataCount from {$this->config['database']}.{$this->config['table']} where {$this->config['datecolumn']} > date_sub(convert_tz(now(),'SYSTEM','GMT'), interval {$this->config['alarm_timeout_time']}";
+			$result = @mysql_query($result);
+			eval(SQL_ERR);
+			$row = @mysql_fetch_array($result);
+			eval(SQL_ERR);
+			if ((mysql_num_rows($result) == 0) or ($row['dataCount'] == 0)) {
+				// *** ALARM! ***
+				$this->RecordAlarmCheck("NULL", "timeout");
+				$this->SendAlarm("no readings from {$this->config['database']}.{$this->config['table']}.{$this->config['datacolumn']} for {$this->config['alarm_timeout_time']}"."s");
+				exit(1);
+			}
+		}
+		if ($currentAlarmReading < $this->config['alarm_min']) {
+			// *** ALARM! ***
+			$this->RecordAlarmCheck($currentAlarmReading, "min");
+			$this->SendAlarm("{$this->config['description']}: reading of $currentAlarmReading{$this->config['datatype_short']} less than limit of {$this->config['alarm_min']}{$this->config['datatype_short']}");
+			exit(1);
+		}
+		if ($currentAlarmReading > $this->config['alarm_max']) {
+			// *** ALARM! ***
+			$this->RecordAlarmCheck($currentAlarmReading, "max");
+			$this->SendAlarm("{$this->config['description']}: reading of $currentAlarmReading{$this->config['datatype_short']} greater than limit of {$this->config['alarm_max']}{$this->config['datatype_short']}");
+			exit(1);
+		}
+		// record the check without any alarm
+		$this->RecordAlarmCheck($currentAlarmReading);
+	} // end CheckAlarmCondition()
+
+
+	public static function GraphLabelFormat($dtVal) {
+		return date('D m/d H:i:s', $dtVal);
+	}
+
+	public function ShowGraph() {
+		// *** graph last 2 weeks of data ***
+
+
+		// ** recorded temperature values  **
+		// prepare SQL query
+		$query = "select UNIX_TIMESTAMP(mid(convert_tz({$this->config['datecolumn']},'GMT','SYSTEM'), 1, 13)) as sensorDate, avg({$this->config['datacolumn']}) as sensorVal from {$this->config['database']}.{$this->config['table']} where {$this->config['datecolumn']} >= date_sub(convert_tz(now(), 'SYSTEM','GMT'), interval {$this->config['graph_timescale']}) group by sensorDate order by sensorDate";
+		$result = @mysql_query($query);
+		eval(SQL_ERR);
+
+		// prepare input vectors for graph
+		unset($dates);
+		unset($vals);
+		$i = 0;
+		while (($row = mysql_fetch_array($result)) != NULL) {
+			$dates[$i] = $row['sensorDate'];
+			$vals[$i] = $row['sensorVal'];
+			++$i;
+		}
+
+
+
+
+		// ** record of range checks **
+		$query = "select UNIX_TIMESTAMP(convert_tz(sensmon.alarm_check_history.recdate,'GMT','SYSTEM')) as checkDate, "
+			."alarm_min, alarm_max, data_value, alarm_trip_min, alarm_trip_max, alarm_trip_timeout "
+			."from sensmon.alarm_check_history where recdate >= date_sub(convert_tz(now(),'SYSTEM','GMT'), interval {$this->config['graph_timescale']}) order by recdate";
+		echo $query;
+		$result = mysql_query($query);
+		eval(SQL_ERR);
+		unset($checkdates);
+		unset($maxvals);
+		unset($minvals);
+		unset($alarmmax);
+		unset($alarmmin);
+		unset($alarmtimeout);
+
+		$i=0;
+		$alarmmincount=0;
+		$alarmmaxcount=0;
+		$amarmtimecount=0;
+		while (($row = mysql_fetch_array($result)) != NULL) {
+			$checkdates[$i] = $row['checkDate'];
+			$minvals[$i] = $row['alarm_min'];
+			$maxvals[$i] = $row['alarm_max'];
+			$alarmmin[$i] = $row['alarm_trip_min'];
+			if ($alarmmin[$i] > 0) $alarmmincount++;
+			$alarmmax[$i] = $row['alarm_trip_max'];
+			if ($alarmmax[$i] > 0) $alarmmaxcount++;
+			$alarmtimeout[$i] = $row['alarm_trip_timeout'];
+			if ($alarmtimeout[$i] > 0) $alarmtimecount++;
+			++$i;
+		}
+
+		// instantiate the graph object
+		$graph = new Graph(540, 300);
+
+		$graph->SetMargin(40,140,30,130);
+
+		$graph->SetScale('datlin', $this->config['graph_range_min'], $this->config['graph_range_max']);
+
+		// create the line plot
+		$graph->title->Set($this->config['description']);
+		$graph->xaxis->SetLabelFormatCallback('GraphLabelFormat');
+		$graph->xaxis->SetLabelAngle(90);
+		//$graph->xaxis->SetTickInterval(15000);
+		$graph->xaxis->SetTickSide(SIDE_TOP);
+
+		// values line
+		$valline = new LinePlot ($vals, $dates);
+		$valline->SetLegend($this->config['datatype_short']);
+		$valline->SetColor("darkgreen");
+		$valline->SetWeight(3);
+		$graph->Add($valline);
+
+		// min checks
+		$minline = new LinePlot($minvals, $checkdates);
+		$minline->SetLegend("min");
+		$minline->SetColor("blue");
+		$minline->SetWeight(1);
+		$graph->Add($minline);
+
+		// max checks
+		$maxline = new LinePlot($maxvals, $checkdates);
+		$maxline->SetLegend("max");
+		$maxline->SetColor("red");
+		$maxline->SetWeight(1);
+		$graph->Add($maxline);
+
+		// alarm mins
+		if ($alarmmincount > 0) {
+			$aminline = new ScatterPlot($alarmmin, $checkdates);
+			$aminline->SetLegend("Alarm min");
+			$aminline->SetWeight(1);
+			$aminline->mark->SetType(MARK_IMG, '/opt/sensmon/bin/warningblue.png', 0.15);
+			$graph->Add($aminline);
+		}
+
+		// alarm maxs
+		if ($alarmmaxcount > 0) {
+			$amaxline = new ScatterPlot($alarmmax, $checkdates);
+			$amaxline->SetLegend("Alarm max");
+			$amaxline->SetColor("red");
+			$amaxline->SetWeight(1);
+			$amaxline->mark->SetType(MARK_IMG, '/opt/sensmon/bin/warningred.png', 0.15);
+			$graph->Add($amaxline);
+		}
+
+
+		$graph->Stroke();
+	}
+
+}
+?>

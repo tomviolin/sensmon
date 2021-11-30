@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   name=""
+   url="file:///usr/shares/svnrepos/sensmon/trunk/resources"
+   kind="dir"
+   repos="file:///usr/shares/svnrepos/sensmon"
+   schedule="add"
+   revision="0"/>
+<entry
+   name="warningblue.png"
+   kind="file"
+   schedule="add"/>
+<entry
+   name="warningred.png"
+   kind="file"
+   schedule="add"/>
+<entry
+   name="warning.png"
+   kind="file"
+   schedule="add"/>
+<entry
+   name="warning.gif"
+   kind="file"
+   schedule="add"/>
+</wc-entries>
