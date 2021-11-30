@@ -1,0 +1,6 @@
+
+# sensmon system
+# record data once a minute
+* * * * * sleep 30; /opt/sensmon/bin/getdata.sh
+# check limits once an hour
+* * * * * /opt/sensmon/bin/test.php
