@@ -41,7 +41,7 @@ if success {
 	assign \%l \fword(\v(input),1,{*})
 	assign d \fsplit(\%l,&d,{,})
 	# echo value=\"\&d[2] \&d[4]\"\,\&d[6]\,\&d[8]\,\&d[10]
-	! mysql -u citysupplyu -pcoldwater sensmon_citysupply -e "insert into citywaterlog (recdate, temp_c, spcond_mscm, turbid_ntu) values (convert_tz(now(),'SYSTEM','GMT'),\&d[6],\&d[8],\&d[10])"
+	! mysql -h waterdata.glwi.uwm.edu -u citysupplyu -pcoldwater sensmon_citysupply -e "insert into citywaterlog (recdate, temp_c, spcond_mscm, turbid_ntu) values (convert_tz(now(),'SYSTEM','GMT'),\&d[6],\&d[8],\&d[10])"
 }
 
 :end
