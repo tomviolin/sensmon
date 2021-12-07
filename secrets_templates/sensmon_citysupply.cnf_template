@@ -1,0 +1,4 @@
+[mysql]
+host=database.fqdn
+user=database_user
+password=database_password
